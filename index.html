@@ -204,7 +204,6 @@
     <!-- SETTINGS -->
     <div id="settings" class="tab-pane">
       <!-- Budget per day -->
-      <div class="section-title">งบประมาณต่อวัน</div>
       <div class="field" style="margin-bottom:8px;">
         <div class="field-label">กำหนดงบต่อวัน (฿)</div>
         <div class="budget-inp-wrap">
@@ -232,6 +231,17 @@
 
       <div style="margin-bottom:20px;">
         <button class="refresh-btn" style="width:100%;text-align:center;padding:12px;" onclick="refreshDaysCalc()">↻ อัปเดตยอดคงเหลือจาก Notion</button>
+      </div>
+
+      <!-- Monthly Balance -->
+      <div class="section-title">ยอดเงินคงเหลือ</div>
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:16px;padding:18px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;color:#3B82F6;text-transform:uppercase;margin-bottom:4px;">คงเหลือทั้งเดือน (Cash)</div>
+          <div id="settingsBalance" style="font-size:28px;font-weight:800;color:#1E40AF;letter-spacing:-.03em;">—</div>
+          <div style="font-size:11px;color:#3B82F6;margin-top:2px;">ดึงจาก Notion Accounts → Cash</div>
+        </div>
+        <button class="refresh-btn" onclick="refreshDaysCalc()" style="background:#BFDBFE;color:#1E40AF;">↻</button>
       </div>
 
       <!-- Connection info -->
@@ -273,6 +283,7 @@
       document.getElementById("sWorkerUrl").textContent = WORKER.replace("https://","").slice(0,28)+"…";
       if (BUDGET) document.getElementById("budgetInput").value = BUDGET;
       updateDaysBanner();
+      updateSettingsBalance();
     }
   }
 
@@ -336,6 +347,11 @@
     }
   }
 
+  function updateSettingsBalance() {
+    const el = document.getElementById("settingsBalance");
+    if (el) el.textContent = BALANCE !== null ? thb(BALANCE) : "—";
+  }
+
   async function refreshDaysCalc() {
     toast("⏳ กำลังดึงยอดจาก Notion…");
     try {
@@ -360,7 +376,10 @@
     btn.classList.add("active");
     document.getElementById("hTitle").textContent = TITLES[name];
     if (name === "dashboard") loadDash();
-    if (name === "settings" && BALANCE === null) refreshDaysCalc();
+    if (name === "settings") {
+      updateSettingsBalance();
+      if (BALANCE === null) refreshDaysCalc();
+    }
   }
 
   // ── API ──
@@ -446,6 +465,7 @@
         BALANCE = monthBalance;
         localStorage.setItem("cached_balance", BALANCE);
         updateDaysBanner();
+        updateSettingsBalance();
       }
 
       const dayRemain = BUDGET ? BUDGET - totalExp : null;
@@ -468,10 +488,7 @@
               ${dayRemain===null ? "—" : thb(dayRemain)}
             </div>
           </div>
-          <div class="card">
-            <div class="card-label">คงเหลือเดือน</div>
-            <div class="card-val c-blue">${monthBalance!==null ? thb(parseFloat(monthBalance)) : "—"}</div>
-          </div>
+
         </div>
 
         <div class="section-title">รายจ่ายตาม Category</div>
