@@ -270,7 +270,7 @@
   let BUDGET = parseFloat(localStorage.getItem("daily_budget")) || 0;
   let BALANCE = localStorage.getItem("cached_balance") ? parseFloat(localStorage.getItem("cached_balance")) : null;
 
-  const today = () => new Date().toISOString().split("T")[0];
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const thb   = n => "฿" + n.toLocaleString("th-TH");
 
   function init() {
