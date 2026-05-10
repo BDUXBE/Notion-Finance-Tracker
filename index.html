@@ -120,6 +120,7 @@
     .split-card{background:var(--bg);border-radius:14px;padding:13px 15px;}
     .split-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
     .split-card-label{font-size:15px;font-weight:700;color:var(--dark);}
+    .split-name-inp{display:none;width:100%;padding:4px 8px;border-radius:8px;border:1.5px solid var(--blue);font-size:15px;font-weight:700;color:var(--dark);background:white;outline:none;font-family:inherit;margin-bottom:2px;}
     .split-card-acct{display:block;font-size:11px;color:var(--gray);font-weight:500;margin-top:2px;}
     .split-notion-badge{font-size:11px;color:#16A34A;font-weight:600;margin-top:6px;}
     .split-del{background:none;border:none;color:#CBD5E1;font-size:17px;cursor:pointer;padding:2px 4px;line-height:1;transition:color .15s;}
@@ -750,11 +751,16 @@
     list.innerHTML = SPLITS.map((s, i) => `
       <div class="split-card">
         <div class="split-card-top">
-          <div>
-            <span class="split-card-label">🏷️ ${s.label}</span>
+          <div style="flex:1;min-width:0;">
+            <span class="split-card-label" id="sname_${i}">🏷️ ${s.label}</span>
+            <input class="split-name-inp" id="sni_${i}" type="text" value="${s.label}"
+              onblur="confirmNameEdit(${i})" onkeydown="if(event.key==='Enter')this.blur()">
             <span class="split-card-acct">จาก ${s.account||"—"} · ${s.date||""}</span>
           </div>
-          <button class="split-del" id="sdel_${i}" onclick="deleteSplit(${i})">✕</button>
+          <div style="display:flex;gap:6px;flex-shrink:0;align-items:flex-start;">
+            <button class="split-edit-btn" id="sneb_${i}" onclick="toggleNameEdit(${i})">✏️</button>
+            <button class="split-del" id="sdel_${i}" onclick="deleteSplit(${i})">✕</button>
+          </div>
         </div>
         <div class="split-amt-row">
           <span class="split-amt-display" id="sd_${i}">${thb(s.amount)}</span>
@@ -765,6 +771,60 @@
         ${s.notionId ? '<div class="split-notion-badge">✅ ใน Notion</div>' : ''}
       </div>
     `).join("");
+  }
+
+  function toggleNameEdit(i) {
+    const label = document.getElementById("sname_" + i);
+    const inp   = document.getElementById("sni_"   + i);
+    const btn   = document.getElementById("sneb_"  + i);
+    if (inp.style.display === "block") {
+      inp.blur();
+    } else {
+      label.style.display = "none";
+      inp.style.display   = "block";
+      btn.textContent     = "✓";
+      inp.focus(); inp.select();
+    }
+  }
+
+  async function confirmNameEdit(i) {
+    const label = document.getElementById("sname_" + i);
+    const inp   = document.getElementById("sni_"   + i);
+    const btn   = document.getElementById("sneb_"  + i);
+    if (!inp || inp.style.display !== "block") return;
+
+    const newName = inp.value.trim();
+    const oldName = SPLITS[i].label;
+
+    label.textContent   = "🏷️ " + (newName || oldName);
+    label.style.display = "block";
+    inp.style.display   = "none";
+    btn.textContent     = "✏️";
+
+    if (!newName || newName === oldName) return;
+
+    // อัปเดตใน localStorage
+    if (SPLITS[i].notionId && ACCOUNTS[oldName]) {
+      ACCOUNTS[newName] = ACCOUNTS[oldName];
+      delete ACCOUNTS[oldName];
+      populateAcctSelectors();
+    }
+    SPLITS[i].label = newName;
+    saveSplits();
+
+    // sync ชื่อใหม่เข้า Notion
+    if (SPLITS[i].notionId) {
+      try {
+        await patchPage(SPLITS[i].notionId, {
+          properties: {
+            Name: { title: [{ text: { content: newName } }] }
+          }
+        });
+        toast(`✅ เปลี่ยนชื่อเป็น "${newName}" แล้ว`);
+      } catch(e) {
+        toast("❌ Notion sync ล้มเหลว: " + e.message, true);
+      }
+    }
   }
 
   // ── delete confirmation state ──
