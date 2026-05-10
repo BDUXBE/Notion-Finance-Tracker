@@ -331,6 +331,7 @@
   let BUDGET       = parseFloat(localStorage.getItem("daily_budget")) || 0;
   let BALANCE      = localStorage.getItem("cached_balance") ? parseFloat(localStorage.getItem("cached_balance")) : null;
   let ACCT_DB_ID   = localStorage.getItem("accounts_db_id") || "";
+  let _splitFromReady = false;
 
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const thb   = n => "฿" + n.toLocaleString("th-TH");
@@ -684,11 +685,23 @@
         properties: { "Starting Balance": { number: srcSB - amt } }
       });
 
-      // 3. สร้าง account ใหม่พร้อม Starting Balance = amt
+      // 3. สร้าง account ใหม่
+      // เพิ่ม "Split From" property ใน database schema ก่อน (ทำครั้งเดียวต่อ session)
+      if (!_splitFromReady) {
+        try {
+          await notionCall(
+            `https://api.notion.com/v1/databases/${ACCT_DB_ID.replace(/-/g,"")}`,
+            { properties: { "Split From": { rich_text: {} } } },
+            "PATCH"
+          );
+          _splitFromReady = true;
+        } catch(e) { /* ข้ามถ้าทำไม่ได้ */ }
+      }
+
       const newProps = {
         Name:               { title: [{ text: { content: label } }] },
         "Starting Balance": { number: amt },
-        "Split From":       { rich_text: [{ text: { content: acct } }] }
+        ...(_splitFromReady ? { "Split From": { rich_text: [{ text: { content: acct } }] } } : {})
       };
 
       let newPage;
