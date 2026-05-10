@@ -303,10 +303,6 @@
           <input id="acctDbInput" type="text" placeholder="Accounts Database ID">
           <button onclick="saveAcctDb()">บันทึก</button>
         </div>
-        <div class="budget-inp-wrap" style="margin-top:8px;">
-          <input id="tmplIdInput" type="text" placeholder="Template Page ID (optional)">
-          <button onclick="saveTmplId()">บันทึก</button>
-        </div>
       </div>
 
       <!-- Connection info -->
@@ -335,7 +331,6 @@
   let BUDGET       = parseFloat(localStorage.getItem("daily_budget")) || 0;
   let BALANCE      = localStorage.getItem("cached_balance") ? parseFloat(localStorage.getItem("cached_balance")) : null;
   let ACCT_DB_ID   = localStorage.getItem("accounts_db_id") || "";
-  let TMPL_ID      = localStorage.getItem("template_page_id") || "";
 
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const thb   = n => "฿" + n.toLocaleString("th-TH");
@@ -352,7 +347,6 @@
       document.getElementById("sWorkerUrl").textContent = WORKER.replace("https://","").slice(0,28)+"…";
       if (BUDGET) document.getElementById("budgetInput").value = BUDGET;
       if (ACCT_DB_ID) document.getElementById("acctDbInput").value = ACCT_DB_ID;
-      if (TMPL_ID) document.getElementById("tmplIdInput").value = TMPL_ID;
       updateDaysBanner();
       updateSettingsBalance();
       renderSplits();
@@ -469,7 +463,6 @@
     if (name === "settings") {
       updateSettingsBalance();
       if (ACCT_DB_ID) document.getElementById("acctDbInput").value = ACCT_DB_ID;
-      if (TMPL_ID) document.getElementById("tmplIdInput").value = TMPL_ID;
       if (BALANCE === null) refreshDaysCalc();
     }
   }
@@ -667,12 +660,6 @@
     localStorage.setItem("accounts_db_id", v);
     toast("✅ บันทึก Accounts DB แล้ว");
   }
-  function saveTmplId() {
-    const v = document.getElementById("tmplIdInput").value.trim();
-    TMPL_ID = v;
-    localStorage.setItem("template_page_id", v);
-    toast("✅ บันทึก Template ID แล้ว");
-  }
 
   // Submit split: patch Starting Balance ทั้ง 2 accounts — ไม่นับเป็นรายจ่าย/รายรับ
   async function submitSplit() {
@@ -698,27 +685,21 @@
       });
 
       // 3. สร้าง account ใหม่พร้อม Starting Balance = amt
-      let newProps = {
+      const newProps = {
         Name:               { title: [{ text: { content: label } }] },
         "Starting Balance": { number: amt },
         "Split From":       { rich_text: [{ text: { content: acct } }] }
       };
 
-      // copy template properties ถ้ามี (ข้าม formula, rollup, computed)
-      if (TMPL_ID) {
-        try {
-          const tmpl = await notionCall(
-            `https://api.notion.com/v1/pages/${TMPL_ID.replace(/-/g,"")}`, null, "GET"
-          );
-          const skip = ["title","formula","rollup","unique_id","created_time","last_edited_time","created_by","last_edited_by","number"];
-          Object.entries(tmpl.properties || {}).forEach(([k, v]) => {
-            if (skip.includes(v.type) || k === "Starting Balance") return;
-            newProps[k] = v;
-          });
-        } catch(e) { /* ใช้ blank ถ้า fetch template ไม่ได้ */ }
+      let newPage;
+      try {
+        newPage = await createPage(ACCT_DB_ID, newProps);
+      } catch(e) {
+        await patchPage(srcPageId, {
+          properties: { "Starting Balance": { number: srcSB } }
+        });
+        throw new Error("สร้าง account ไม่สำเร็จ (คืนเงินกลับแล้ว): " + e.message);
       }
-
-      const newPage    = await createPage(ACCT_DB_ID, newProps);
       const notionPageId = newPage.id;
       ACCOUNTS[label]  = notionPageId;
       populateAcctSelectors();
@@ -794,9 +775,11 @@
     if (btn) { btn.disabled = true; }
 
     try {
-      // 1. Archive account page ใน Notion
+      // 1. Archive account page ใน Notion (ถ้ายังมีอยู่)
       if (s.notionId) {
-        await patchPage(s.notionId, { archived: true });
+        try {
+          await patchPage(s.notionId, { archived: true });
+        } catch(e) { /* page อาจถูกลบไปแล้ว — ข้ามได้ */ }
         delete ACCOUNTS[label];
         populateAcctSelectors();
       }
@@ -804,21 +787,28 @@
       // 2. คืนเงินกลับ account ต้นทาง (เพิ่ม Starting Balance — ไม่สร้าง Income)
       const srcPageId = s.account ? ACCOUNTS[s.account] : null;
       if (srcPageId) {
-        const srcPage = await notionCall(
-          `https://api.notion.com/v1/pages/${srcPageId.replace(/-/g,"")}`, null, "GET"
-        );
-        const srcSB = srcPage.properties?.["Starting Balance"]?.number ?? 0;
-        await patchPage(srcPageId, {
-          properties: { "Starting Balance": { number: srcSB + s.amount } }
-        });
+        try {
+          const srcPage = await notionCall(
+            `https://api.notion.com/v1/pages/${srcPageId.replace(/-/g,"")}`, null, "GET"
+          );
+          const srcSB = srcPage.properties?.["Starting Balance"]?.number ?? 0;
+          await patchPage(srcPageId, {
+            properties: { "Starting Balance": { number: srcSB + s.amount } }
+          });
+        } catch(e) { /* คืนเงินไม่สำเร็จ — แต่ยังลบออกจาก list ได้ */ }
       }
 
+      // 3. ลบออกจาก localStorage เสมอ ไม่ว่า Notion จะ error หรือไม่
       SPLITS.splice(i, 1);
       saveSplits();
       renderSplits();
-      toast(`🗑️ ลบ "${label}" และคืน ${thb(s.amount)} → ${s.account || ""} แล้ว`);
+      toast(`🗑️ ลบ "${label}" แล้ว`);
     } catch(e) {
-      toast("❌ " + e.message, true);
+      // error ที่ไม่คาดคิด — ยังลบออกจาก list ให้
+      SPLITS.splice(i, 1);
+      saveSplits();
+      renderSplits();
+      toast(`🗑️ ลบ "${label}" แล้ว (Notion: ${e.message})`);
     }
     if (btn) btn.disabled = false;
   }
@@ -933,9 +923,8 @@
     try {
       const res  = await fetch(WORKER + "/config");
       const data = await res.json();
-      if (data.accounts_db_id)   ACCT_DB_ID = data.accounts_db_id;
-      if (data.template_page_id) TMPL_ID    = data.template_page_id;
-      if (ACCT_DB_ID || TMPL_ID) {
+      if (data.accounts_db_id) ACCT_DB_ID = data.accounts_db_id;
+      if (ACCT_DB_ID) {
         const note   = document.getElementById("configNote");
         const manual = document.getElementById("configManual");
         if (note)   note.style.display   = "block";
