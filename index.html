@@ -111,6 +111,29 @@
     .budget-inp-wrap input{flex:1;}
     .budget-inp-wrap button{flex-shrink:0;padding:13px 18px;background:var(--dark);color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
 
+    /* Split Money */
+    .split-add-row{display:flex;gap:8px;margin-bottom:14px;align-items:stretch;}
+    .split-add-row input{flex:1;min-width:0;}
+    .split-add-row .split-amt-inp{width:90px;flex:none;}
+    .split-add-btn{padding:0 16px;background:var(--dark);color:white;border:none;border-radius:10px;font-size:22px;cursor:pointer;flex-shrink:0;line-height:1;}
+    .split-list{display:flex;flex-direction:column;gap:9px;}
+    .split-card{background:var(--bg);border-radius:14px;padding:13px 15px;}
+    .split-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+    .split-card-label{font-size:15px;font-weight:700;color:var(--dark);}
+    .split-card-acct{display:block;font-size:11px;color:var(--gray);font-weight:500;margin-top:2px;}
+    .split-notion-badge{font-size:11px;color:#16A34A;font-weight:600;margin-top:6px;}
+    .split-del{background:none;border:none;color:#CBD5E1;font-size:17px;cursor:pointer;padding:2px 4px;line-height:1;transition:color .15s;}
+    .split-del:hover{color:var(--red);}
+    .split-amt-row{display:flex;align-items:center;gap:8px;}
+    .split-amt-display{font-size:24px;font-weight:800;color:var(--blue);letter-spacing:-.03em;flex:1;}
+    .split-edit-inp{display:none;flex:1;padding:7px 10px;border-radius:8px;border:1.5px solid var(--blue);font-size:18px;font-weight:800;color:var(--blue);background:white;outline:none;font-family:inherit;}
+    .split-edit-btn{background:white;border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--gray);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
+    .split-edit-btn:hover{border-color:var(--blue);color:var(--blue);}
+    .split-total-row{margin-top:12px;padding:13px 16px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;display:flex;justify-content:space-between;align-items:center;}
+    .split-total-label{font-size:11px;font-weight:700;color:#3B82F6;letter-spacing:.08em;text-transform:uppercase;}
+    .split-total-val{font-size:20px;font-weight:800;color:#1E40AF;}
+    .split-empty{text-align:center;padding:18px 0;color:var(--gray);font-size:13px;}
+
     /* Toast */
     #toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:var(--dark);color:var(--white);padding:13px 24px;border-radius:100px;font-size:14px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.25);z-index:9999;white-space:nowrap;opacity:0;transition:opacity .2s;pointer-events:none;}
     #toast.show{opacity:1;}
@@ -151,6 +174,7 @@
       <button class="tab-btn active" onclick="go('expense',this)">💸 จ่าย</button>
       <button class="tab-btn" onclick="go('income',this)">💰 รับ</button>
       <button class="tab-btn" onclick="go('dashboard',this)">📊 วันนี้</button>
+      <button class="tab-btn" onclick="go('split',this)">🗂️ แยก</button>
       <button class="tab-btn" onclick="go('settings',this)">⚙️</button>
     </div>
   </header>
@@ -201,6 +225,34 @@
       <div id="dashBody"><div class="loading"><div class="spin">⏳</div><br>กำลังโหลด...</div></div>
     </div>
 
+    <!-- SPLIT -->
+    <div id="split" class="tab-pane">
+      <!-- Form -->
+      <div class="field">
+        <div class="field-label">ชื่อ / วัตถุประสงค์</div>
+        <input id="spLabel" type="text" placeholder="เช่น ค่าหนังสือ, ทริปปลายปี…">
+      </div>
+      <div class="field">
+        <div class="field-label">จำนวนเงิน (฿)</div>
+        <input id="spAmt" class="big-num" type="number" inputmode="decimal" placeholder="0" style="color:var(--blue);">
+      </div>
+      <div class="field">
+        <div class="field-label">หักจากบัญชี</div>
+        <select id="spAcct"></select>
+      </div>
+      <button id="spBtn" class="btn btn-dark" onclick="submitSplit()">แยกเงิน →</button>
+
+      <!-- List -->
+      <div style="margin-top:26px;">
+        <div class="section-title">เงินที่แยกไว้</div>
+        <div id="splitList" class="split-list"></div>
+        <div id="splitTotal" class="split-total-row" style="display:none;margin-top:10px;">
+          <span class="split-total-label">รวมที่แยกไว้ทั้งหมด</span>
+          <span class="split-total-val" id="splitTotalVal">฿0</span>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="settings" class="tab-pane">
       <!-- Budget per day -->
@@ -229,19 +281,32 @@
         <div class="days-warn-formula" id="daysWarnFormula"></div>
       </div>
 
-      <div style="margin-bottom:20px;">
-        <button class="refresh-btn" style="width:100%;text-align:center;padding:12px;" onclick="refreshDaysCalc()">↻ อัปเดตยอดคงเหลือจาก Notion</button>
-      </div>
-
       <!-- Monthly Balance -->
       <div class="section-title">ยอดเงินคงเหลือ</div>
-      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:16px;padding:18px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;color:#3B82F6;text-transform:uppercase;margin-bottom:4px;">คงเหลือทั้งเดือน (Cash)</div>
-          <div id="settingsBalance" style="font-size:28px;font-weight:800;color:#1E40AF;letter-spacing:-.03em;">—</div>
-          <div style="font-size:11px;color:#3B82F6;margin-top:2px;">ดึงจาก Notion Accounts → Cash</div>
+      <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:16px;padding:18px 20px;margin-bottom:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;color:#3B82F6;text-transform:uppercase;margin-bottom:4px;">คงเหลือทั้งเดือน (Cash)</div>
+        <div id="settingsBalance" style="font-size:28px;font-weight:800;color:#1E40AF;letter-spacing:-.03em;">—</div>
+        <div style="font-size:11px;color:#3B82F6;margin-top:2px;">ดึงจาก Notion Accounts → Cash</div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <button id="refreshBtn" class="refresh-btn" style="width:100%;text-align:center;padding:12px;" onclick="refreshDaysCalc()">↻ อัปเดตยอดคงเหลือจาก Notion</button>
+      </div>
+
+      <!-- Connection info -->
+      <div class="section-title">Notion Accounts Database</div>
+      <div id="configNote" style="display:none;background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:12px;padding:12px 16px;font-size:13px;color:#15803D;font-weight:600;margin-bottom:16px;">
+        ✅ โหลดค่าจาก Worker secrets แล้ว
+      </div>
+      <div id="configManual" style="margin-bottom:20px;">
+        <div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.6;">ใส่เองได้ถ้า Worker ยังไม่ได้ตั้ง secrets</div>
+        <div class="budget-inp-wrap">
+          <input id="acctDbInput" type="text" placeholder="Accounts Database ID">
+          <button onclick="saveAcctDb()">บันทึก</button>
         </div>
-        <button class="refresh-btn" onclick="refreshDaysCalc()" style="background:#BFDBFE;color:#1E40AF;">↻</button>
+        <div class="budget-inp-wrap" style="margin-top:8px;">
+          <input id="tmplIdInput" type="text" placeholder="Template Page ID (optional)">
+          <button onclick="saveTmplId()">บันทึก</button>
+        </div>
       </div>
 
       <!-- Connection info -->
@@ -264,11 +329,13 @@
   const INCOME_DB  = "2864b328-f4f9-808f-8f13-c48ee33c05db";
   const ACCOUNTS   = { Cash:"2864b328-f4f9-80fe-b6c3-eb8202c8fb6d", Savings:"2864b328-f4f9-8093-93b9-c876d57c5e7a" };
   const CAT_CLR    = { Food:"#EF4444",Sweet:"#F97316",Buffet:"#6B7280",Transportation:"#EAB308",Entertainment:"#A16207","Personal care":"#3B82F6","Self improvement":"#EC4899",Health:"#22C55E",Utilities:"#7C3AED" };
-  const TITLES     = { expense:"บันทึกรายจ่าย", income:"บันทึกรายรับ", dashboard:"สรุปวันนี้", settings:"ตั้งค่า" };
+  const TITLES     = { expense:"บันทึกรายจ่าย", income:"บันทึกรายรับ", dashboard:"สรุปวันนี้", split:"แยกเงิน", settings:"ตั้งค่า" };
 
-  let WORKER = localStorage.getItem("worker_url");
-  let BUDGET = parseFloat(localStorage.getItem("daily_budget")) || 0;
-  let BALANCE = localStorage.getItem("cached_balance") ? parseFloat(localStorage.getItem("cached_balance")) : null;
+  let WORKER       = localStorage.getItem("worker_url");
+  let BUDGET       = parseFloat(localStorage.getItem("daily_budget")) || 0;
+  let BALANCE      = localStorage.getItem("cached_balance") ? parseFloat(localStorage.getItem("cached_balance")) : null;
+  let ACCT_DB_ID   = localStorage.getItem("accounts_db_id") || "";
+  let TMPL_ID      = localStorage.getItem("template_page_id") || "";
 
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const thb   = n => "฿" + n.toLocaleString("th-TH");
@@ -278,13 +345,30 @@
     document.getElementById("iDate").value = today();
     document.getElementById("dashDate").textContent =
       new Date().toLocaleDateString("th-TH",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+    // populate account selectors dynamically
+    populateAcctSelectors();
     if (WORKER) {
       showApp();
       document.getElementById("sWorkerUrl").textContent = WORKER.replace("https://","").slice(0,28)+"…";
       if (BUDGET) document.getElementById("budgetInput").value = BUDGET;
+      if (ACCT_DB_ID) document.getElementById("acctDbInput").value = ACCT_DB_ID;
+      if (TMPL_ID) document.getElementById("tmplIdInput").value = TMPL_ID;
       updateDaysBanner();
       updateSettingsBalance();
+      renderSplits();
+      fetchConfig();
     }
+  }
+
+  function populateAcctSelectors() {
+    const names = Object.keys(ACCOUNTS);
+    ["eAcct","iAcct","spAcct"].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join("");
+      if (names.includes(cur)) sel.value = cur;
+    });
   }
 
   function showApp() {
@@ -353,19 +437,24 @@
   }
 
   async function refreshDaysCalc() {
-    toast("⏳ กำลังดึงยอดจาก Notion…");
+    const btn = document.getElementById("refreshBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ กำลังอัปเดต…"; }
     try {
-      const res = await fetch(WORKER + "/balance");
-      const data = await res.json();
-      if (data.balance !== null && data.balance !== undefined) {
-        BALANCE = data.balance;
+      const [balRes] = await Promise.all([
+        fetch(WORKER + "/balance").then(r => r.json()),
+        loadAccounts()   // รีโหลด accounts ทุกครั้ง — ลบของที่ถูก archive ออก
+      ]);
+      if (balRes.balance !== null && balRes.balance !== undefined) {
+        BALANCE = balRes.balance;
         localStorage.setItem("cached_balance", BALANCE);
         updateDaysBanner();
-        toast("✅ อัปเดตยอดแล้ว: " + thb(BALANCE));
+        updateSettingsBalance();
+        toast("✅ อัปเดตทั้งหมดแล้ว: " + thb(BALANCE));
       } else {
         toast("ไม่พบยอด Balance", true);
       }
     } catch(e) { toast("❌ " + e.message, true); }
+    if (btn) { btn.disabled = false; btn.textContent = "↻ อัปเดตยอดคงเหลือจาก Notion"; }
   }
 
   // ── Tab ──
@@ -376,18 +465,20 @@
     btn.classList.add("active");
     document.getElementById("hTitle").textContent = TITLES[name];
     if (name === "dashboard") loadDash();
+    if (name === "split") renderSplits();
     if (name === "settings") {
       updateSettingsBalance();
+      if (ACCT_DB_ID) document.getElementById("acctDbInput").value = ACCT_DB_ID;
+      if (TMPL_ID) document.getElementById("tmplIdInput").value = TMPL_ID;
       if (BALANCE === null) refreshDaysCalc();
     }
   }
 
   // ── API ──
-  async function notionCall(endpoint, body) {
-    const res = await fetch(WORKER, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ endpoint, body })
-    });
+  async function notionCall(endpoint, body, method="POST") {
+    const opts = { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ endpoint, body, method }) };
+    const res = await fetch(WORKER, opts);
     if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error||"Error "+res.status); }
     return res.json();
   }
@@ -395,7 +486,13 @@
     return notionCall("https://api.notion.com/v1/pages", { parent:{database_id:dbId}, properties:props });
   }
   async function queryDb(dbId, filter) {
-    return notionCall(`https://api.notion.com/v1/databases/${dbId}/query`, { filter, page_size:100 });
+    const body = { page_size: 100 };
+    if (filter) body.filter = filter;
+    return notionCall(`https://api.notion.com/v1/databases/${dbId}/query`, body);
+  }
+  async function patchPage(pageId, body) {
+    const id = pageId.replace(/-/g, "");
+    return notionCall(`https://api.notion.com/v1/pages/${id}`, body, "PATCH");
   }
 
   // ── Submit Expense ──
@@ -553,6 +650,276 @@
   }
   function setBusy(id,on,lbl){
     const b=document.getElementById(id); b.disabled=on; b.textContent=lbl;
+  }
+
+  // ── Split Money ──
+  let SPLITS = JSON.parse(localStorage.getItem("splits") || "[]");
+
+  function saveSplits() {
+    localStorage.setItem("splits", JSON.stringify(SPLITS));
+  }
+
+  // Settings: save Accounts DB ID
+  function saveAcctDb() {
+    const v = document.getElementById("acctDbInput").value.trim();
+    if (!v) return toast("กรุณาใส่ Database ID", true);
+    ACCT_DB_ID = v;
+    localStorage.setItem("accounts_db_id", v);
+    toast("✅ บันทึก Accounts DB แล้ว");
+  }
+  function saveTmplId() {
+    const v = document.getElementById("tmplIdInput").value.trim();
+    TMPL_ID = v;
+    localStorage.setItem("template_page_id", v);
+    toast("✅ บันทึก Template ID แล้ว");
+  }
+
+  // Submit split: patch Starting Balance ทั้ง 2 accounts — ไม่นับเป็นรายจ่าย/รายรับ
+  async function submitSplit() {
+    const label = document.getElementById("spLabel").value.trim();
+    const amt   = parseFloat(document.getElementById("spAmt").value);
+    const acct  = document.getElementById("spAcct").value;
+    if (!label || !amt) return toast("กรุณากรอกชื่อและจำนวนเงิน", true);
+    if (!ACCT_DB_ID)   return toast("กรุณาตั้งค่า Accounts Database ID ก่อน", true);
+    setBusy("spBtn", true, "กำลังแยกเงิน…");
+
+    try {
+      const srcPageId = ACCOUNTS[acct];
+
+      // 1. ดึง Starting Balance ปัจจุบันของ account ต้นทาง
+      const srcPage = await notionCall(
+        `https://api.notion.com/v1/pages/${srcPageId.replace(/-/g,"")}`, null, "GET"
+      );
+      const srcSB = srcPage.properties?.["Starting Balance"]?.number ?? 0;
+
+      // 2. หักเงินจาก account ต้นทาง (ลด Starting Balance — ไม่สร้าง Expense)
+      await patchPage(srcPageId, {
+        properties: { "Starting Balance": { number: srcSB - amt } }
+      });
+
+      // 3. สร้าง account ใหม่พร้อม Starting Balance = amt
+      let newProps = {
+        Name:              { title: [{ text: { content: label } }] },
+        "Starting Balance": { number: amt }
+      };
+
+      // copy template properties ถ้ามี (ข้าม formula, rollup, computed)
+      if (TMPL_ID) {
+        try {
+          const tmpl = await notionCall(
+            `https://api.notion.com/v1/pages/${TMPL_ID.replace(/-/g,"")}`, null, "GET"
+          );
+          const skip = ["title","formula","rollup","unique_id","created_time","last_edited_time","created_by","last_edited_by","number"];
+          Object.entries(tmpl.properties || {}).forEach(([k, v]) => {
+            if (skip.includes(v.type) || k === "Starting Balance") return;
+            newProps[k] = v;
+          });
+        } catch(e) { /* ใช้ blank ถ้า fetch template ไม่ได้ */ }
+      }
+
+      const newPage    = await createPage(ACCT_DB_ID, newProps);
+      const notionPageId = newPage.id;
+      ACCOUNTS[label]  = notionPageId;
+      populateAcctSelectors();
+
+      // 4. บันทึกใน localStorage
+      SPLITS.push({ label, amount: amt, account: acct, notionId: notionPageId, date: today() });
+      saveSplits();
+      renderSplits();
+
+      document.getElementById("spLabel").value = "";
+      document.getElementById("spAmt").value  = "";
+      toast(`✅ แยกเงิน "${label}" ${thb(amt)} แล้ว`);
+    } catch(e) {
+      toast("❌ " + e.message, true);
+    }
+    setBusy("spBtn", false, "แยกเงิน →");
+  }
+
+  function renderSplits() {
+    const list     = document.getElementById("splitList");
+    const totalEl  = document.getElementById("splitTotal");
+    const totalVal = document.getElementById("splitTotalVal");
+    if (!list) return;
+
+    if (!SPLITS.length) {
+      list.innerHTML = '<div class="split-empty">ยังไม่มีรายการ<br>กรอกชื่อ + จำนวนเงิน แล้วกด "แยกเงิน →"</div>';
+      totalEl.style.display = "none";
+      return;
+    }
+
+    const total = SPLITS.reduce((s, x) => s + x.amount, 0);
+    totalEl.style.display = "flex";
+    totalVal.textContent  = thb(total);
+
+    list.innerHTML = SPLITS.map((s, i) => `
+      <div class="split-card">
+        <div class="split-card-top">
+          <div>
+            <span class="split-card-label">🏷️ ${s.label}</span>
+            <span class="split-card-acct">จาก ${s.account||"—"} · ${s.date||""}</span>
+          </div>
+          <button class="split-del" id="sdel_${i}" onclick="deleteSplit(${i})">✕</button>
+        </div>
+        <div class="split-amt-row">
+          <span class="split-amt-display" id="sd_${i}">${thb(s.amount)}</span>
+          <input class="split-edit-inp" id="sei_${i}" type="number" inputmode="decimal" value="${s.amount}"
+            onblur="confirmEdit(${i})" onkeydown="if(event.key==='Enter')this.blur()">
+          <button class="split-edit-btn" id="seb_${i}" onclick="toggleEdit(${i})">แก้ไข</button>
+        </div>
+        ${s.notionId ? '<div class="split-notion-badge">✅ ใน Notion</div>' : ''}
+      </div>
+    `).join("");
+  }
+
+  // ── delete confirmation state ──
+  const _delPending = {};
+
+  async function deleteSplit(i) {
+    const s = SPLITS[i];
+    if (!s) return;
+
+    // double-tap confirm
+    if (!_delPending[i]) {
+      _delPending[i] = setTimeout(() => delete _delPending[i], 2500);
+      const btn = document.getElementById(`sdel_${i}`);
+      if (btn) { btn.textContent = "ยืนยัน?"; btn.style.color = "var(--red)"; }
+      return;
+    }
+    clearTimeout(_delPending[i]); delete _delPending[i];
+
+    const label = s.label;
+    const btn = document.getElementById("spBtn");
+    if (btn) { btn.disabled = true; }
+
+    try {
+      // 1. Archive account page ใน Notion
+      if (s.notionId) {
+        await patchPage(s.notionId, { archived: true });
+        delete ACCOUNTS[label];
+        populateAcctSelectors();
+      }
+
+      // 2. คืนเงินกลับ account ต้นทาง (เพิ่ม Starting Balance — ไม่สร้าง Income)
+      const srcPageId = s.account ? ACCOUNTS[s.account] : null;
+      if (srcPageId) {
+        const srcPage = await notionCall(
+          `https://api.notion.com/v1/pages/${srcPageId.replace(/-/g,"")}`, null, "GET"
+        );
+        const srcSB = srcPage.properties?.["Starting Balance"]?.number ?? 0;
+        await patchPage(srcPageId, {
+          properties: { "Starting Balance": { number: srcSB + s.amount } }
+        });
+      }
+
+      SPLITS.splice(i, 1);
+      saveSplits();
+      renderSplits();
+      toast(`🗑️ ลบ "${label}" และคืน ${thb(s.amount)} → ${s.account || ""} แล้ว`);
+    } catch(e) {
+      toast("❌ " + e.message, true);
+    }
+    if (btn) btn.disabled = false;
+  }
+
+  function toggleEdit(i) {
+    const display = document.getElementById("sd_"  + i);
+    const inp     = document.getElementById("sei_" + i);
+    const btn     = document.getElementById("seb_" + i);
+    if (inp.style.display === "block") {
+      inp.blur();
+    } else {
+      display.style.display = "none";
+      inp.style.display     = "block";
+      btn.textContent       = "บันทึก";
+      inp.focus(); inp.select();
+    }
+  }
+
+  async function confirmEdit(i) {
+    const inp     = document.getElementById("sei_" + i);
+    const display = document.getElementById("sd_"  + i);
+    const btn     = document.getElementById("seb_" + i);
+    if (!inp || inp.style.display !== "block") return;
+
+    const newVal = parseFloat(inp.value) || 0;
+    const oldVal = SPLITS[i].amount;
+    const diff   = newVal - oldVal;
+    const s      = SPLITS[i];
+
+    // อัปเดต UI ทันที
+    SPLITS[i].amount      = newVal;
+    saveSplits();
+    display.textContent   = thb(newVal);
+    display.style.display = "block";
+    inp.style.display     = "none";
+    btn.textContent       = "แก้ไข";
+    document.getElementById("splitTotalVal").textContent =
+      thb(SPLITS.reduce((a, x) => a + x.amount, 0));
+
+    if (diff === 0 || !s.notionId) return;
+
+    // sync ส่วนต่างเข้า Notion ด้วย patch Starting Balance
+    try {
+      // อัปเดต Starting Balance ของ split account
+      const splitPage = await notionCall(
+        `https://api.notion.com/v1/pages/${s.notionId.replace(/-/g,"")}`, null, "GET"
+      );
+      const splitSB = splitPage.properties?.["Starting Balance"]?.number ?? 0;
+      await patchPage(s.notionId, {
+        properties: { "Starting Balance": { number: splitSB + diff } }
+      });
+
+      // อัปเดต Starting Balance ของ account ต้นทาง (ทิศทางตรงข้าม)
+      const srcPageId = s.account ? ACCOUNTS[s.account] : null;
+      if (srcPageId) {
+        const srcPage = await notionCall(
+          `https://api.notion.com/v1/pages/${srcPageId.replace(/-/g,"")}`, null, "GET"
+        );
+        const srcSB = srcPage.properties?.["Starting Balance"]?.number ?? 0;
+        await patchPage(srcPageId, {
+          properties: { "Starting Balance": { number: srcSB - diff } }
+        });
+      }
+      toast(`✅ แก้ไขยอด "${s.label}" แล้ว`);
+    } catch(e) {
+      toast("❌ Notion sync ล้มเหลว: " + e.message, true);
+    }
+  }
+
+  // โหลด accounts ทั้งหมดจาก Notion DB → เติม dropdown
+  async function loadAccounts() {
+    if (!ACCT_DB_ID) return;
+    try {
+      const res   = await queryDb(ACCT_DB_ID);
+      const pages = res.results || [];
+
+      // ล้างทั้งหมดแล้วเติมใหม่จาก Notion ล้วนๆ
+      Object.keys(ACCOUNTS).forEach(k => delete ACCOUNTS[k]);
+      pages.forEach(p => {
+        if (p.archived) return;
+        const name = p.properties?.Name?.title?.[0]?.text?.content;
+        if (name && p.id) ACCOUNTS[name] = p.id;
+      });
+
+      populateAcctSelectors();
+    } catch(e) { /* fail silently */ }
+  }
+
+  async function fetchConfig() {
+    try {
+      const res  = await fetch(WORKER + "/config");
+      const data = await res.json();
+      if (data.accounts_db_id)   ACCT_DB_ID = data.accounts_db_id;
+      if (data.template_page_id) TMPL_ID    = data.template_page_id;
+      if (ACCT_DB_ID || TMPL_ID) {
+        const note   = document.getElementById("configNote");
+        const manual = document.getElementById("configManual");
+        if (note)   note.style.display   = "block";
+        if (manual) manual.style.display = "none";
+      }
+      if (ACCT_DB_ID) await loadAccounts();  // โหลด accounts ทันทีหลังได้ DB ID
+    } catch(e) { /* fallback: ใช้ค่าจาก localStorage */ }
   }
 
   init();
