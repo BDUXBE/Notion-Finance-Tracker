@@ -699,8 +699,9 @@
 
       // 3. สร้าง account ใหม่พร้อม Starting Balance = amt
       let newProps = {
-        Name:              { title: [{ text: { content: label } }] },
-        "Starting Balance": { number: amt }
+        Name:               { title: [{ text: { content: label } }] },
+        "Starting Balance": { number: amt },
+        "Split From":       { rich_text: [{ text: { content: acct } }] }
       };
 
       // copy template properties ถ้ามี (ข้าม formula, rollup, computed)
@@ -894,15 +895,37 @@
       const res   = await queryDb(ACCT_DB_ID);
       const pages = res.results || [];
 
-      // ล้างทั้งหมดแล้วเติมใหม่จาก Notion ล้วนๆ
+      // ล้าง ACCOUNTS แล้วเติมใหม่จาก Notion
       Object.keys(ACCOUNTS).forEach(k => delete ACCOUNTS[k]);
       pages.forEach(p => {
         if (p.archived) return;
         const name = p.properties?.Name?.title?.[0]?.text?.content;
         if (name && p.id) ACCOUNTS[name] = p.id;
       });
-
       populateAcctSelectors();
+
+      // reconstruct SPLITS จาก Notion — หา account ที่มี "Split From" property มีค่า
+      const knownIds = new Set(SPLITS.map(s => s.notionId).filter(Boolean));
+      let changed = false;
+      pages.forEach(p => {
+        if (p.archived) return;
+        if (knownIds.has(p.id)) return;  // มีใน localStorage แล้ว ข้ามได้
+        const splitFrom = p.properties?.["Split From"]?.rich_text?.[0]?.plain_text || "";
+        if (!splitFrom) return;  // ไม่มี Split From = base account ข้าม
+        const name = p.properties?.Name?.title?.[0]?.text?.content;
+        const sb   = p.properties?.["Starting Balance"]?.number ?? 0;
+        if (!name) return;
+        SPLITS.push({
+          label:    name,
+          amount:   sb,
+          account:  splitFrom,
+          notionId: p.id,
+          date:     p.created_time?.slice(0, 10) || today()
+        });
+        changed = true;
+      });
+      if (changed) { saveSplits(); renderSplits(); }
+
     } catch(e) { /* fail silently */ }
   }
 
