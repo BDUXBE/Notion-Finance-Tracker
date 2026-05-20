@@ -80,7 +80,14 @@
     .today-tbl th{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--gray);text-transform:uppercase;text-align:left;padding:0 0 8px;border-bottom:2px solid var(--border);}
     .today-tbl th:last-child{text-align:right;}
     .today-tbl td{padding:11px 0;border-bottom:1px solid var(--bg);font-size:14px;vertical-align:middle;}
-    .today-tbl td:last-child{text-align:right;font-weight:700;color:var(--red);}
+    .td-price{text-align:right!important;font-weight:700!important;color:var(--red)!important;}
+    .today-tbl td:last-child{text-align:center;vertical-align:middle;padding:2px 0;width:34px;}
+    .td-editable{cursor:pointer;border-radius:6px;transition:background .15s;}
+    .td-editable:hover{background:var(--bg);}
+    .dash-del-btn{background:none;border:none;color:#CBD5E1;font-size:16px;cursor:pointer;padding:4px 7px;border-radius:6px;line-height:1;transition:color .15s;font-family:inherit;}
+    .dash-del-btn:hover,.dash-del-btn:active{color:var(--red);}
+    .dash-inline-inp{border:1.5px solid #6366F1;border-radius:6px;padding:3px 7px;font-size:14px;font-weight:500;color:var(--dark);background:white;outline:none;font-family:inherit;box-sizing:border-box;}
+    .dash-inline-sel{border:1.5px solid #6366F1;border-radius:6px;padding:3px 6px;font-size:12px;color:var(--dark);background:white;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;max-width:108px;}
     .td-name{color:var(--dark);font-weight:500;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .cat-badge{display:inline-block;background:var(--bg);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--gray);font-weight:600;}
     .empty{text-align:center;padding:28px 0;color:var(--gray);font-size:14px;}
@@ -327,6 +334,8 @@
   const ACCOUNTS   = { Cash:"2864b328-f4f9-80fe-b6c3-eb8202c8fb6d", Savings:"2864b328-f4f9-8093-93b9-c876d57c5e7a" };
   const CAT_CLR    = { Food:"#EF4444",Sweet:"#F97316",Buffet:"#6B7280",Transportation:"#EAB308",Entertainment:"#A16207","Personal care":"#3B82F6","Self improvement":"#EC4899",Health:"#22C55E",Utilities:"#7C3AED" };
   const TITLES     = { expense:"บันทึกรายจ่าย", income:"บันทึกรายรับ", dashboard:"สรุปวันนี้", split:"แยกเงิน", settings:"ตั้งค่า" };
+  const DASH_CATS  = ["Food","Sweet","Buffet","Transportation","Entertainment","Personal care","Self improvement","Health","Utilities","Other"];
+  let DASH_EXPS    = [];
 
   let WORKER       = localStorage.getItem("worker_url");
   let BUDGET       = parseFloat(localStorage.getItem("daily_budget")) || 0;
@@ -541,10 +550,12 @@
       ]);
 
       const exps = (eRes.results||[]).map(p=>({
+        id: p.id,
         name: p.properties.Name?.title?.[0]?.text?.content||"-",
         price: p.properties.Price?.number||0,
         cat: p.properties.Category?.select?.name||"Other"
       }));
+      DASH_EXPS = exps;
 
       const totalExp = exps.reduce((s,e)=>s+e.price, 0);
 
@@ -572,11 +583,11 @@
         <div class="cards">
           <div class="card">
             <div class="card-label">รายจ่าย</div>
-            <div class="card-val c-red">${thb(totalExp)}</div>
+            <div class="card-val c-red" id="dashTotalExp">${thb(totalExp)}</div>
           </div>
           <div class="card">
             <div class="card-label">คงเหลือวันนี้</div>
-            <div class="card-val ${dayRemain===null?'c-blue':dayRemain>=0?'c-green':'c-red'}">
+            <div class="card-val ${dayRemain===null?'c-blue':dayRemain>=0?'c-green':'c-red'}" id="dashDayRemain">
               ${dayRemain===null ? "—" : thb(dayRemain)}
             </div>
           </div>
@@ -599,18 +610,157 @@
         ${exps.length===0
           ? '<div class="empty" style="padding:16px 0">ยังไม่มีรายการ</div>'
           : `<table class="today-tbl">
-              <thead><tr><th>รายการ</th><th>หมวด</th><th>ราคา</th></tr></thead>
-              <tbody>${exps.map(e=>`<tr>
-                <td class="td-name">${e.name}</td>
-                <td><span class="cat-badge">${e.cat}</span></td>
-                <td>${thb(e.price)}</td>
-              </tr>`).join("")}</tbody>
+              <thead><tr><th>รายการ</th><th>หมวด</th><th style="text-align:right">ราคา</th><th></th></tr></thead>
+              <tbody id="dashTbody">${dashRowsHtml()}</tbody>
             </table>`}
       `;
     } catch(e) {
       el.innerHTML = `<div class="empty">โหลดไม่สำเร็จ<br><small style="color:var(--red)">${e.message}</small><br><br>
         <button class="refresh-btn" onclick="loadDash()">ลองอีกครั้ง</button></div>`;
     }
+  }
+
+  // ── Dashboard inline edit helpers ──
+  function dashRowsHtml() {
+    return DASH_EXPS.map((e,i)=>`<tr>
+      <td class="td-name td-editable" id="dname_${i}" onclick="dashEditName(${i})">${e.name}</td>
+      <td class="td-editable" id="dcat_${i}" onclick="dashEditCat(${i})"><span class="cat-badge">${e.cat}</span></td>
+      <td class="td-price td-editable" id="dprice_${i}" onclick="dashEditPrice(${i})">${thb(e.price)}</td>
+      <td><button class="dash-del-btn" onclick="dashDeleteRow(event,${i})">✕</button></td>
+    </tr>`).join("");
+  }
+
+  function updateDashCards() {
+    const totalExp = DASH_EXPS.reduce((s,e)=>s+e.price, 0);
+    const el1 = document.getElementById("dashTotalExp");
+    if (el1) el1.textContent = thb(totalExp);
+    const dayRemain = BUDGET ? BUDGET - totalExp : null;
+    const el2 = document.getElementById("dashDayRemain");
+    if (el2) {
+      el2.textContent = dayRemain===null ? "—" : thb(dayRemain);
+      el2.className   = "card-val " + (dayRemain===null?"c-blue":dayRemain>=0?"c-green":"c-red");
+    }
+  }
+
+  function dashEditName(i) {
+    const cell = document.getElementById("dname_" + i);
+    if (!cell || cell.querySelector("input")) return;
+    const cur = DASH_EXPS[i].name;
+    cell.innerHTML = `<input class="dash-inline-inp" type="text" style="max-width:110px;">`;
+    const inp = cell.querySelector("input");
+    inp.value = cur;
+    inp.onblur    = () => dashSaveName(i, inp);
+    inp.onkeydown = ev => { if(ev.key==="Enter") inp.blur(); if(ev.key==="Escape"){ ev.preventDefault(); cell.textContent=DASH_EXPS[i].name; } };
+    inp.focus(); inp.select();
+  }
+  async function dashSaveName(i, inp) {
+    const newName = inp.value.trim();
+    const cell    = document.getElementById("dname_" + i);
+    const oldName = DASH_EXPS[i]?.name || "";
+    if (!newName || newName === oldName) { if(cell) cell.textContent = oldName; return; }
+    DASH_EXPS[i].name = newName;
+    if (cell) cell.textContent = newName;
+    try {
+      await patchPage(DASH_EXPS[i].id, { properties:{ Name:{ title:[{ text:{ content:newName } }] } } });
+      toast("✅ แก้ชื่อรายการแล้ว");
+    } catch(e) {
+      DASH_EXPS[i].name = oldName;
+      const c = document.getElementById("dname_" + i);
+      if (c) c.textContent = oldName;
+      toast("❌ " + e.message, true);
+    }
+  }
+
+  function dashEditCat(i) {
+    const cell = document.getElementById("dcat_" + i);
+    if (!cell || cell.querySelector("select")) return;
+    const cur  = DASH_EXPS[i].cat;
+    const opts = DASH_CATS.map(c=>`<option${c===cur?" selected":""}>${c}</option>`).join("");
+    cell.innerHTML = `<select class="dash-inline-sel">${opts}</select>`;
+    const sel = cell.querySelector("select");
+    sel.onchange = () => dashSaveCat(i, sel.value, sel);
+    sel.onblur   = () => { if (!sel._done) { cell.innerHTML=`<span class="cat-badge">${DASH_EXPS[i].cat}</span>`; } };
+    sel.focus();
+  }
+  async function dashSaveCat(i, newCat, sel) {
+    if (sel) sel._done = true;
+    const cell   = document.getElementById("dcat_" + i);
+    const oldCat = DASH_EXPS[i]?.cat || "";
+    DASH_EXPS[i].cat = newCat;
+    if (cell) cell.innerHTML = `<span class="cat-badge">${newCat}</span>`;
+    if (newCat === oldCat) return;
+    try {
+      await patchPage(DASH_EXPS[i].id, { properties:{ Category:{ select:{ name:newCat } } } });
+      toast("✅ แก้หมวดแล้ว");
+    } catch(e) {
+      DASH_EXPS[i].cat = oldCat;
+      const c = document.getElementById("dcat_" + i);
+      if (c) c.innerHTML = `<span class="cat-badge">${oldCat}</span>`;
+      toast("❌ " + e.message, true);
+    }
+  }
+
+  function dashEditPrice(i) {
+    const cell = document.getElementById("dprice_" + i);
+    if (!cell || cell.querySelector("input")) return;
+    const cur = DASH_EXPS[i].price;
+    cell.innerHTML = `<input class="dash-inline-inp" type="number" inputmode="decimal"
+      style="width:80px;text-align:right;color:var(--red);font-weight:700;">`;
+    const inp = cell.querySelector("input");
+    inp.value = cur;
+    inp.onblur    = () => dashSavePrice(i, inp);
+    inp.onkeydown = ev => { if(ev.key==="Enter") inp.blur(); if(ev.key==="Escape"){ ev.preventDefault(); cell.textContent=thb(DASH_EXPS[i].price); } };
+    inp.focus(); inp.select();
+  }
+  async function dashSavePrice(i, inp) {
+    const newVal = parseFloat(inp.value);
+    const cell   = document.getElementById("dprice_" + i);
+    const oldVal = DASH_EXPS[i]?.price ?? 0;
+    if (isNaN(newVal) || newVal < 0) { if(cell) cell.textContent = thb(oldVal); return; }
+    DASH_EXPS[i].price = newVal;
+    if (cell) cell.textContent = thb(newVal);
+    updateDashCards();
+    if (newVal === oldVal) return;
+    try {
+      await patchPage(DASH_EXPS[i].id, { properties:{ Price:{ number:newVal } } });
+      toast("✅ แก้ราคาแล้ว");
+    } catch(e) {
+      DASH_EXPS[i].price = oldVal;
+      const c = document.getElementById("dprice_" + i);
+      if (c) c.textContent = thb(oldVal);
+      updateDashCards();
+      toast("❌ " + e.message, true);
+    }
+  }
+
+  const _dashDelPending = {};
+  async function dashDeleteRow(ev, i) {
+    ev.stopPropagation();
+    const btn = ev.currentTarget || ev.target;
+    if (!_dashDelPending[i]) {
+      _dashDelPending[i] = setTimeout(() => {
+        delete _dashDelPending[i];
+        if (btn && btn.isConnected) { btn.textContent = "✕"; btn.style.color = ""; }
+      }, 2500);
+      if (btn) { btn.textContent = "ลบ?"; btn.style.color = "var(--red)"; }
+      return;
+    }
+    clearTimeout(_dashDelPending[i]); delete _dashDelPending[i];
+    const item = DASH_EXPS[i];
+    if (!item) return;
+    try { await patchPage(item.id, { archived: true }); } catch(e) { /* proceed anyway */ }
+    DASH_EXPS.splice(i, 1);
+    const tbody = document.getElementById("dashTbody");
+    if (tbody) {
+      if (!DASH_EXPS.length) {
+        const tbl = tbody.closest("table");
+        if (tbl) tbl.outerHTML = '<div class="empty" style="padding:16px 0">ยังไม่มีรายการ</div>';
+      } else {
+        tbody.innerHTML = dashRowsHtml();
+      }
+    }
+    updateDashCards();
+    toast("🗑️ ลบรายการแล้ว");
   }
 
   // ── Pie ──
